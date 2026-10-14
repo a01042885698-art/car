@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>전국 고속도로 휴게소 지도</title>
+  <style>
+    /* 기본 레이아웃 스타일 초기화 */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body, html {
+      width: 100%;
+      height: 100%;
+      font-family: 'Noto Sans KR', sans-serif, malgun gothic, sans-serif;
+    }
+    
+    /* 화면을 사이드바와 지도로 분할하는 메인 컨테이너 */
+    #container {
+      display: flex;
+      width: 100%;
+      height: 100vh;
+      position: relative;
+    }
+
+    /* 왼쪽 사이드바 스타일 */
+    #sidebar {
+      width: 360px;
+      height: 100%;
+      background: #ffffff;
+      border-right: 1px solid #e0e0e0;
+      display: flex;
+      flex-direction: column;
+      z-index: 10;
+      box-shadow: 2px 0 6px rgba(0,0,0,0.1);
+    }
+
+    /* 헤더 영역 */
+    #header {
+      padding: 16px;
+      background: #2b3a4a;
+      color: #ffffff;
+    }
+    #header h1 {
+      font-size: 18px;
+      font-weight: bold;
+    }
+
+    /* 탭 버튼 영역 */
+    .tab-group {
+      display: flex;
+      background: #f1f3f5;
+      border-bottom: 1px solid #ddd;
+    }
+    .tab-button {
+      flex: 1;
+      padding: 12px 8px;
+      border: none;
+      background: none;
+      font-size: 14px;
+      font-weight: bold;
+      color: #666;
+      cursor: pointer;
+      transition: all 0.2s ease-in-out;
+    }
+    .tab-button.active {
+      background: #ffffff;
+      color: #2b3a4a;
+      border-bottom: 3px solid #2b3a4a;
+    }
+
+    /* 장소 리스트 영역 */
+    #place-list {
+      flex: 1;
+      overflow-y: auto;
+      list-style: none;
+    }
+    .place-item {
+      padding: 14px 16px;
+      border-bottom: 1px solid #eee;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .place-item:hover {
+      background: #f8f9fa;
+    }
+    .place-name {
+      font-size: 15px;
+      font-weight: bold;
+      color: #333;
+      margin-bottom: 4px;
+    }
+    .place-address {
+      font-size: 13px;
+      color: #666;
+    }
+    .place-phone {
+      font-size: 12px;
+      color: #888;
+      margin-top: 2px;
+    }
+
+    /* 오른쪽 지도 영역 */
+    #map-wrapper {
+      flex: 1;
+      position: relative;
+    }
+    #map {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* 상단 지도 컨트롤 버튼 (교통현황, 로드뷰) */
+    .map-controls {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      z-index: 5;
+      display: flex;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.95);
+      padding: 6px;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    }
+    .control-btn {
+      padding: 8px 12px;
+      font-size: 13px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background: #ffffff;
+      color: #333;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    .control-btn.active {
+      background: #2b3a4a;
+      color: #ffffff;
+      border-color: #2b3a4a;
+    }
+
+    /* 인포윈도우(팝업) 커스텀 스타일 */
+    .info-window {
+      padding: 10px;
+      font-size: 13px;
+      max-width: 220px;
+      line-height: 1.4;
+    }
+    .info-title {
+      font-size: 14px;
+      font-weight: bold;
+      color: #2b3a4a;
+      margin-bottom: 4px;
+    }
+  </style>
+
+  <!-- 카카오맵 API 스크립트 로드 (발급받은 본인의 JavaScript 앱 키를 사용해주세요) -->
+  <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=YOUR_JAVASCRIPT_KEY&libraries=services"></script>
+</head>
+<body>
+
+  <div id="container">
+    <!-- 왼쪽 사이드바 -->
+    <div id="sidebar">
+      <div id="header">
+        <h1>전국 고속도로 휴게소 지도</h1>
+      </div>
+
+      <!-- 탭 버튼 목록 -->
+      <div class="tab-group">
+        <button id="tab-station" class="tab-button active" onclick="switchTab('station')">주유소, 충전소</button>
+        <button id="tab-restarea" class="tab-button" onclick="switchTab('restArea')">전국 고속도로 휴게소</button>
+      </div>
+
+      <!-- 장소 검색 결과 리스트 -->
+      <ul id="place-list"></ul>
+    </div>
+
+    <!-- 오른쪽 지도 영역 -->
+    <div id="map-wrapper">
+      <!-- 지도 기능버튼 (교통현황, 로드뷰) -->
+      <div class="map-controls">
+        <button id="btn-traffic" class="control-btn" onclick="toggleTrafficOverlay()">교통현황</button>
+        <button id="btn-roadview" class="control-btn" onclick="toggleRoadviewOverlay()">로드뷰</button>
+      </div>
+
+      <!-- 카카오맵이 그려지는 지점 -->
+      <div id="map"></div>
+    </div>
+  </div>
+
+  <script>
+    // 글로벌 변수 선언 (영문 변수명 사용)
+    var map;
+    var placesService;
+    var infoWindow;
+    var markers = [];
+    var currentTab = 'station'; // 현재 선택된 탭 ('station' 또는 'restArea')
+    var isTrafficActive = false; // 교통현황 활성화 상태
+    var isRoadviewActive = false; // 로드뷰 활성화 상태
+
+    // 웹페이지 로드 시 초기화 실행
+    window.onload = function() {
+      initMap();
+    };
+
+    // 카카오맵 및 검색 서비스 초기화 함수
+    function initMap() {
+      var container = document.getElementById('map');
+      var defaultCenter = new kakao.maps.LatLng(37.566826, 126.9786567); // 기본 위치 (서울시청)
+      var options = {
+        center: defaultCenter,
+        level: 8 // 고속도로 주변 탐색에 적합한 확대 레벨
+      };
+
+      // 지도 및 검색 서비스 생성
+      map = new kakao.maps.Map(container, options);
+      placesService = new kakao.maps.services.Places();
+      infoWindow = new kakao.maps.InfoWindow({ zIndex: 1 });
+
+      // HTML5 Geolocation으로 사용자의 현재 위치 가져오기
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          function(position) {
+            var userLat = position.coords.latitude;
+            var userLng = position.coords.longitude;
+            var userLocation = new kakao.maps.LatLng(userLat, userLng);
+
+            // 사용자의 현재 위치로 지도 중심 이동 후 검색
+            map.setCenter(userLocation);
+            searchPlaces();
+          },
+          function(error) {
+            console.warn('사용자 위치 수신 실패. 기본 위치에서 검색을 진행합니다.');
+            searchPlaces();
+          }
+        );
+      } else {
+        searchPlaces();
+      }
+    }
+
+    // 탭 전환 함수
+    function switchTab(tabType) {
+      if (currentTab === tabType) return;
+
+      currentTab = tabType;
+
+      // 탭 버튼 UI 스타일 변경
+      document.getElementById('tab-station').classList.remove('active');
+      document.getElementById('tab-restarea').classList.remove('active');
+
+      if (tabType === 'station') {
+        document.getElementById('tab-station').classList.add('active');
+      } else {
+        document.getElementById('tab-restarea').classList.add('active');
+      }
+
+      // 기존 탭 결과 삭제 후 새 탭의 검색 실행
+      searchPlaces();
+    }
+
+    // 현재 선택된 탭에 따른 장소 검색 함수
+    function searchPlaces() {
+      // 기존 지도 마커 및 팝업 삭제
+      clearMarkers();
+      infoWindow.close();
+
+      var mapCenter = map.getCenter();
+      var searchOptions = {
+        location: mapCenter,
+        radius: 20000 // 중심 좌표로부터 20km 반경 검색
+      };
+
+      if (currentTab === 'station') {
+        // 탭 1: 카테고리 코드 OL7 (주유소, 충전소) 검색
+        placesService.categorySearch('OL7', placesSearchCallback, searchOptions);
+      } else if (currentTab === 'restArea') {
+        // 탭 2: '전국 고속도로 휴게소' 키워드 검색
+        placesService.keywordSearch('전국 고속도로 휴게소', placesSearchCallback, searchOptions);
+      }
+    }
+
+    // 검색 결과를 전달받는 콜백 함수
+    function placesSearchCallback(data, status, pagination) {
+      var listElement = document.getElementById('place-list');
+      listElement.innerHTML = ''; // 왼쪽 리스트 지우기
+
+      if (status === kakao.maps.services.Status.OK) {
+        for (var i = 0; i < data.length; i++) {
+          var place = data[i];
+          var placePosition = new kakao.maps.LatLng(place.y, place.x);
+
+          // 지도에 마커 생성
+          var marker = addMarker(placePosition, place);
+
+          // 왼쪽 리스트 항목 생성 및 지도 이벤트 연결
+          var listItem = createListItem(place, marker);
+          listElement.appendChild(listItem);
+        }
+      } else if (status === kakao.maps.services.Status.ZERO_RESULT) {
+        listElement.innerHTML = '<li style="padding:20px; text-align:center; color:#888;">검색 결과가 없습니다.</li>';
+      } else if (status === kakao.maps.services.Status.ERROR) {
+        listElement.innerHTML = '<li style="padding:20px; text-align:center; color:red;">검색 중 오류가 발생했습니다.</li>';
+      }
+    }
+
+    // 마커 생성 및 클릭 이벤트 바인딩
+    function addMarker(position, place) {
+      var marker = new kakao.maps.Marker({
+        position: position,
+        map: map
+      });
+
+      markers.push(marker);
+
+      // 마커 클릭 시 팝업(인포윈도우) 표시
+      kakao.maps.event.addListener(marker, 'click', function() {
+        displayInfoWindow(marker, place);
+      });
+
+      return marker;
+    }
+
+    // 리스트 항목 HTML 생성 및 클릭 이벤트 바인딩
+    function createListItem(place, marker) {
+      var li = document.createElement('li');
+      li.className = 'place-item';
+
+      var address = place.road_address_name ? place.road_address_name : place.address_name;
+      var phone = place.phone ? place.phone : '전화번호 없음';
+
+      li.innerHTML = `
+        <div class="place-name">${place.place_name}</div>
+        <div class="place-address">${address}</div>
+        <div class="place-phone">☎ ${phone}</div>
+      `;
+
+      // 리스트 클릭 시 지도 중심 이동 및 인포윈도우 표시
+      li.addEventListener('click', function() {
+        var position = new kakao.maps.LatLng(place.y, place.x);
+        map.panTo(position);
+        displayInfoWindow(marker, place);
+      });
+
+      return li;
+    }
+
+    // 마커 팝업(인포윈도우) 표시 함수
+    function displayInfoWindow(marker, place) {
+      var address = place.road_address_name ? place.road_address_name : place.address_name;
+      var content = `
+        <div class="info-window">
+          <div class="info-title">${place.place_name}</div>
+          <div>${address}</div>
+        </div>
+      `;
+      infoWindow.setContent(content);
+      infoWindow.open(map, marker);
+    }
+
+    // 지도 상의 기존 마커 전체 지우기
+    function clearMarkers() {
+      for (var i = 0; i < markers.length; i++) {
+        markers[i].setMap(null);
+      }
+      markers = [];
+    }
+
+    // [기능 1] 실시간 교통현황 레이어 온/오프 토글
+    function toggleTrafficOverlay() {
+      var trafficButton = document.getElementById('btn-traffic');
+      if (!isTrafficActive) {
+        map.addOverlayMapTypeId(kakao.maps.MapTypeId.TRAFFIC);
+        isTrafficActive = true;
+        trafficButton.classList.add('active');
+      } else {
+        map.removeOverlayMapTypeId(kakao.maps.MapTypeId.TRAFFIC);
+        isTrafficActive = false;
+        trafficButton.classList.remove('active');
+      }
+    }
+
+    // [기능 2] 로드뷰 가능 도로 레이어 온/오프 토글
+    function toggleRoadviewOverlay() {
+      var roadviewButton = document.getElementById('btn-roadview');
+      if (!isRoadviewActive) {
+        map.addOverlayMapTypeId(kakao.maps.MapTypeId.ROADVIEW);
+        isRoadviewActive = true;
+        roadviewButton.classList.add('active');
+      } else {
+        map.removeOverlayMapTypeId(kakao.maps.MapTypeId.ROADVIEW);
+        isRoadviewActive = false;
+        roadviewButton.classList.remove('active');
+      }
+    }
+  </script>
+</body>
+</html>
